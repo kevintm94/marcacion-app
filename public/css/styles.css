@@ -1,0 +1,6 @@
+body { background: #f4f6f9; }
+#marc-reloj { font-variant-numeric: tabular-nums; }
+.display-5 { font-size: 2.6rem; }
+.badge-fuera { background: #ffc107; color: #212529; }
+.badge-valida { background: #198754; }
+.badge-dup { background: #6c757d; }

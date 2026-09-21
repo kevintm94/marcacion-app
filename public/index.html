@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marcación GPS</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="vista-login" class="container d-flex align-items-center justify-content-center min-vh-100">
+  <div class="card shadow p-4" style="max-width:400px;width:100%">
+    <h4 class="text-center mb-1">🕐 Marcación GPS</h4>
+    <p class="text-muted text-center small mb-4">Sistema de registro de asistencia</p>
+    <form id="form-login">
+      <div class="mb-3">
+        <label class="form-label">Usuario</label>
+        <input type="text" class="form-control" id="login-user" required autocomplete="username">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Contraseña</label>
+        <input type="password" class="form-control" id="login-pass" required autocomplete="current-password">
+      </div>
+      <div id="login-error" class="alert alert-danger d-none py-2"></div>
+      <button class="btn btn-primary w-100" id="btn-login">Ingresar</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ NAV ============ -->
+<nav id="nav-principal" class="navbar navbar-dark bg-dark d-none">
+  <div class="container">
+    <span class="navbar-brand">🕐 Marcación GPS</span>
+    <div class="d-flex align-items-center gap-3">
+      <span class="text-light small" id="nav-usuario"></span>
+      <button class="btn btn-outline-light btn-sm" id="btn-logout">Salir</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ VISTA MARCACIÓN (móvil) ============ -->
+<div id="vista-marcacion" class="d-none">
+  <div class="container py-4" style="max-width:480px">
+    <div class="card shadow">
+      <div class="card-body text-center">
+        <h5 id="marc-saludo" class="mb-1"></h5>
+        <div id="marc-reloj" class="display-5 fw-bold mb-3">--:--:--</div>
+
+        <div class="mb-3">
+          <span class="badge text-bg-secondary" id="marc-gps-estado">📍 Obteniendo ubicación…</span>
+        </div>
+        <p class="small text-muted mb-1" id="marc-coords"></p>
+        <p class="small text-muted" id="marc-punto-cercano"></p>
+
+        <div class="d-grid gap-3 mt-4">
+          <button class="btn btn-success btn-lg py-3" id="btn-entrada">
+            ▶ MARCAR ENTRADA
+          </button>
+          <button class="btn btn-danger btn-lg py-3" id="btn-salida">
+            ⏹ MARCAR SALIDA
+          </button>
+        </div>
+
+        <div id="marc-resultado" class="mt-4"></div>
+      </div>
+    </div>
+
+    <div class="card shadow mt-3">
+      <div class="card-body">
+        <h6 class="card-title">Mis últimas marcaciones</h6>
+        <div id="lista-marcaciones" class="small"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PANEL ADMIN (desktop) ============ -->
+<div id="vista-admin" class="d-none">
+  <div class="container-fluid py-4 px-4">
+    <ul class="nav nav-tabs" id="tabs-admin">
+      <li class="nav-item"><a class="nav-link active" data-tab="reportes" href="#">Reportes</a></li>
+      <li class="nav-item d-none tab-op"><a class="nav-link" data-tab="empleados" href="#">Empleados y usuarios</a></li>
+      <li class="nav-item d-none tab-op"><a class="nav-link" data-tab="puntos" href="#">Puntos de marcación</a></li>
+      <li class="nav-item d-none tab-op"><a class="nav-link" data-tab="turnos" href="#">Turnos</a></li>
+      <li class="nav-item d-none tab-op tab-rh"><a class="nav-link" data-tab="asignaciones" href="#">Asignaciones</a></li>
+    </ul>
+    <div id="contenido-admin" class="mt-4"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/marcacion.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
