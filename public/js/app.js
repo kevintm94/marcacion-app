@@ -22,12 +22,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (API.token && API.usuario) iniciarApp();
 });
 
-function iniciarApp() {
+async function iniciarApp() {
   document.getElementById('vista-login').classList.add('d-none');
   document.getElementById('nav-principal').classList.remove('d-none');
   document.getElementById('nav-usuario').textContent =
     `${API.usuario.nombres} ${API.usuario.apellidos} (${API.usuario.rol})`;
 
+  const esEmpleado = API.usuario.rol === 'EMPLEADO';
+  const nav = document.getElementById('nav-principal').querySelector('.d-flex');
+
+  // Pestañas según rol
   if (API.puedeGestionar()) {
     document.querySelectorAll('.tab-op').forEach(el => el.classList.remove('d-none'));
   }
@@ -35,22 +39,31 @@ function iniciarApp() {
     document.querySelectorAll('.tab-rh').forEach(el => el.classList.remove('d-none'));
   }
 
-  // Por defecto: panel admin si tiene permisos, si no la marcación
-  if (API.puedeGestionar() || API.puedeVerReportes()) {
+  if (!esEmpleado) {
+    // Botón para volver al panel de administración (visible en la vista de marcación)
+    const btnAdmin = document.createElement('button');
+    btnAdmin.className = 'btn btn-outline-light btn-sm';
+    btnAdmin.id = 'btn-ir-admin';
+    btnAdmin.textContent = 'Administración';
+    btnAdmin.onclick = () => mostrarVista('admin');
+    nav.insertBefore(btnAdmin, nav.firstChild);
+
+    // Botón Marcación: solo si tiene al menos un punto Y un turno asignados
+    try {
+      const cfg = await API.get('/api/marcaciones/mi-config');
+      if (cfg.tienePunto && cfg.tieneTurno) {
+        const btnMarc = document.createElement('button');
+        btnMarc.className = 'btn btn-outline-light btn-sm';
+        btnMarc.id = 'btn-ir-marcacion';
+        btnMarc.textContent = 'Marcación';
+        btnMarc.onclick = () => mostrarVista('marcacion');
+        nav.insertBefore(btnMarc, nav.firstChild);
+      }
+    } catch { /* sin configuración -> solo admin */ }
+
     mostrarVista('admin');
   } else {
     mostrarVista('marcacion');
-  }
-
-  // Enlace rápido a marcación para quien también tiene panel admin
-  if (API.puedeGestionar() || API.puedeVerReportes()) {
-    const nav = document.getElementById('nav-principal').querySelector('.d-flex');
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-outline-light btn-sm';
-    btn.id = 'btn-ir-marcacion';
-    btn.textContent = 'Marcación';
-    btn.onclick = () => mostrarVista('marcacion');
-    nav.insertBefore(btn, nav.firstChild);
   }
 
   document.querySelectorAll('#tabs-admin .nav-link').forEach(tab => {

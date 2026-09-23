@@ -102,6 +102,16 @@ router.post('/puntos', ADMIN_OPS, async (req, res) => {
 
 router.put('/puntos/:id', ADMIN_OPS, async (req, res) => {
   const { nombre, direccion, latitud, longitud, radio_mt, activo } = req.body;
+  // Restricción: solo se puede desactivar si no hay asignaciones ACTIVAS
+  if (!activo) {
+    const [asig] = await db.query(
+      'SELECT COUNT(*) AS n FROM empleado_punto WHERE punto_id = :id AND activo = 1', { id: req.params.id });
+    if (asig[0].n > 0) {
+      return res.status(409).json({
+        error: `No se puede desactivar: hay ${asig[0].n} empleado(s) con asignación ACTIVA a este punto. Inactive las asignaciones primero.`
+      });
+    }
+  }
   await db.query(
     `UPDATE puntos_marcacion SET nombre=:nombre, direccion=:direccion, latitud=:latitud,
      longitud=:longitud, radio_mt=:radio_mt, activo=:activo WHERE id=:id`,
@@ -126,6 +136,16 @@ router.post('/turnos', ADMIN_OPS, async (req, res) => {
 
 router.put('/turnos/:id', ADMIN_OPS, async (req, res) => {
   const { nombre, hora_entrada, hora_salida, tolerancia_min, activo } = req.body;
+  // Restricción: solo se puede desactivar si no hay asignaciones ACTIVAS
+  if (!activo) {
+    const [asig] = await db.query(
+      'SELECT COUNT(*) AS n FROM empleado_turno WHERE turno_id = :id AND activo = 1', { id: req.params.id });
+    if (asig[0].n > 0) {
+      return res.status(409).json({
+        error: `No se puede desactivar: hay ${asig[0].n} empleado(s) con asignación ACTIVA a este turno. Inactive las asignaciones primero.`
+      });
+    }
+  }
   await db.query(
     `UPDATE turnos SET nombre=:nombre, hora_entrada=:hora_entrada, hora_salida=:hora_salida,
      tolerancia_min=:tolerancia_min, activo=:activo WHERE id=:id`,

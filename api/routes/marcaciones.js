@@ -30,6 +30,25 @@ function horaConTolerancia(horaStr, toleranciaMin) {
   return d;
 }
 
+// GET /api/marcaciones/mi-config -> ¿tiene al menos un punto y un turno asignados?
+router.get('/mi-config', autenticar, async (req, res) => {
+  try {
+    const [p] = await db.query(
+      `SELECT COUNT(*) AS n FROM empleado_punto
+       WHERE empleado_id = :empId AND activo = 1`, { empId: req.usuario.empleado_id });
+    const [t] = await db.query(
+      `SELECT COUNT(*) AS n FROM empleado_turno et
+       JOIN turnos tr ON tr.id = et.turno_id
+       WHERE et.empleado_id = :empId AND et.activo = 1 AND tr.activo = 1
+         AND et.fecha_inicio <= CURDATE()
+         AND (et.fecha_fin IS NULL OR et.fecha_fin >= CURDATE())`,
+      { empId: req.usuario.empleado_id });
+    res.json({ tienePunto: p[0].n > 0, tieneTurno: t[0].n > 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // GET /api/marcaciones/mis-puntos -> puntos autorizados del empleado logueado
 router.get('/mis-puntos', autenticar, async (req, res) => {
   try {

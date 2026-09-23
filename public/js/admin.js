@@ -269,49 +269,185 @@ const Admin = {
   // ============ PUNTOS ============
   async renderPuntos(c) {
     const puntos = await API.get('/api/puntos');
+    const puedeEditar = API.puedeGestionar();
     c.innerHTML = `
       <div class="row"><div class="col-lg-7"><div class="card shadow"><div class="card-body">
         <h6>Puntos de marcación</h6>
-        <table class="table table-sm table-striped"><thead>
-          <tr><th>Nombre</th><th>Dirección</th><th>Lat</th><th>Lon</th><th>Radio (m)</th><th>Activo</th></tr></thead>
+        <table class="table table-sm table-striped align-middle"><thead>
+          <tr><th>Nombre</th><th>Dirección</th><th>Lat</th><th>Lon</th><th>Radio (m)</th><th>Estado</th>
+          ${puedeEditar ? '<th>Acciones</th>' : ''}</tr></thead>
           <tbody>${puntos.map(p => `<tr><td>${p.nombre}</td><td>${p.direccion || ''}</td>
             <td>${p.latitud}</td><td>${p.longitud}</td><td>${p.radio_mt}</td>
-            <td>${p.activo ? '✅' : '⛔'}</td></tr>`).join('')}</tbody></table>
+            <td>${p.activo ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td>
+            ${puedeEditar ? `<td class="text-nowrap">
+              <button class="btn btn-sm btn-outline-primary" onclick="Admin.editarPunto(${p.id})">Editar</button>
+              <button class="btn btn-sm btn-outline-${p.activo ? 'danger' : 'success'}"
+                onclick="Admin.togglePunto(${p.id}, ${p.activo ? 0 : 1})">
+                ${p.activo ? 'Desactivar' : 'Activar'}</button>
+            </td>` : ''}</tr>`).join('')}</tbody></table>
       </div></div></div>
-      <div class="col-lg-5" ${API.puedeGestionar() ? '' : 'hidden'}><div class="card shadow"><div class="card-body">
+      <div class="col-lg-5" ${puedeEditar ? '' : 'hidden'}><div class="card shadow"><div class="card-body">
         <h6>Nuevo punto</h6>
         <form id="f-punto">
           <input class="form-control mb-2" name="nombre" placeholder="Nombre (ej. Sucursal Norte)" required>
           <input class="form-control mb-2" name="direccion" placeholder="Dirección">
-          <input class="form-control mb-2" name="latitud" type="number" step="any" placeholder="Latitud (ej. 19.432608)" required>
-          <input class="form-control mb-2" name="longitud" type="number" step="any" placeholder="Longitud (ej. -99.133208)" required>
+          <label class="form-label small mb-1">Ubicación (clic en el mapa para colocar el pin 📍)</label>
+          <div id="mapa-nuevo-punto" style="height:260px" class="mb-2 rounded border"></div>
+          <div class="row g-2 mb-2">
+            <div class="col"><input class="form-control" name="latitud" type="number" step="any"
+              placeholder="Latitud" required readonly></div>
+            <div class="col"><input class="form-control" name="longitud" type="number" step="any"
+              placeholder="Longitud" required readonly></div>
+            <div class="col-auto"><button type="button" class="btn btn-outline-secondary"
+              id="btn-mi-ubicacion" title="Usar mi ubicación actual">📍 GPS</button></div>
+          </div>
           <input class="form-control mb-2" name="radio_mt" type="number" placeholder="Radio tolerancia en metros" value="100">
           <button class="btn btn-primary w-100">Guardar</button>
         </form>
-        <p class="small text-muted mt-2">💡 Obtén coordenadas desde Google Maps (clic derecho → coordenadas).</p>
-      </div></div></div></div>`;
-    const f = document.getElementById('f-punto');
-    if (f) f.onsubmit = async e => {
-      e.preventDefault();
-      const d = Object.fromEntries(new FormData(e.target));
-      d.latitud = +d.latitud; d.longitud = +d.longitud; d.radio_mt = +d.radio_mt || 100;
-      try { await API.post('/api/puntos', d); this.cargarTab('puntos'); }
-      catch (ex) { alert(ex.message); }
+      </div></div></div></div>
+
+      <!-- Modal editar punto -->
+      <div class="modal fade" id="modal-punto" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Editar punto de marcación</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body"><form id="f-edit-punto">
+          <input type="hidden" name="id">
+          <div class="mb-2"><label class="form-label small">Nombre</label>
+            <input class="form-control" name="nombre" required></div>
+          <div class="mb-2"><label class="form-label small">Dirección</label>
+            <input class="form-control" name="direccion"></div>
+          <div class="mb-2"><label class="form-label small">Ubicación (clic en el mapa para mover el pin 📍)</label>
+            <div id="mapa-edit-punto" style="height:220px" class="rounded border"></div></div>
+          <div class="row g-2 mb-2">
+            <div class="col"><label class="form-label small">Latitud</label>
+              <input class="form-control" name="latitud" type="number" step="any" required readonly></div>
+            <div class="col"><label class="form-label small">Longitud</label>
+              <input class="form-control" name="longitud" type="number" step="any" required readonly></div>
+          </div>
+          <div class="mb-2"><label class="form-label small">Radio de tolerancia (m)</label>
+            <input class="form-control" name="radio_mt" type="number" required></div>
+        </form></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary" id="btn-guardar-punto">Guardar cambios</button>
+        </div>
+      </div></div></div>`;
+    if (puedeEditar) {
+      // Mapa interactivo para el nuevo punto
+      const fPunto = document.getElementById('f-punto');
+      const mapaNuevo = this.crearMapaPunto('mapa-nuevo-punto', fPunto.latitud, fPunto.longitud);
+      document.getElementById('btn-mi-ubicacion').onclick = () => {
+        if (!navigator.geolocation) return alert('Geolocalización no disponible');
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            mapaNuevo.colocar(pos.coords.latitude, pos.coords.longitude);
+            mapaNuevo.map.setView([pos.coords.latitude, pos.coords.longitude], 17);
+          },
+          () => alert('No se pudo obtener su ubicación. Habilite el GPS.'),
+          { enableHighAccuracy: true, timeout: 10000 });
+      };
+      document.getElementById('f-punto').onsubmit = async e => {
+        e.preventDefault();
+        const d = Object.fromEntries(new FormData(e.target));
+        d.latitud = +d.latitud; d.longitud = +d.longitud; d.radio_mt = +d.radio_mt || 100;
+        try { await API.post('/api/puntos', d); this.cargarTab('puntos'); }
+        catch (ex) { alert(ex.message); }
+      };
+      document.getElementById('btn-guardar-punto').onclick = async () => {
+        const d = Object.fromEntries(new FormData(document.getElementById('f-edit-punto')));
+        const id = d.id; delete d.id;
+        d.latitud = +d.latitud; d.longitud = +d.longitud; d.radio_mt = +d.radio_mt;
+        const pts = await API.get('/api/puntos');
+        d.activo = pts.find(x => x.id === +id)?.activo ?? 1;
+        try {
+          await API.put(`/api/puntos/${id}`, d);
+          bootstrap.Modal.getInstance(document.getElementById('modal-punto')).hide();
+          this.cargarTab('puntos');
+        } catch (ex) { alert(ex.message); }
+      };
+    }
+  },
+
+  // Crea un mapa Leaflet con pin arrastrable; sincroniza lat/lon con los inputs
+  crearMapaPunto(divId, latInput, lonInput, latInicial, lonInicial) {
+    if (this._mapas && this._mapas[divId]) { this._mapas[divId].remove(); }
+    const map = L.map(divId).setView(
+      [latInicial ?? -17.3895, lonInicial ?? -66.1568], 13);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap', referrerPolicy: 'strict-origin-when-cross-origin' 
+    }).addTo(map);
+    let marker = null;
+    const colocar = (lat, lon) => {
+      if (marker) {
+        marker.setLatLng([lat, lon]);
+      } else {
+        marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+        marker.on('dragend', ev => {
+          const q = ev.target.getLatLng();
+          latInput.value = q.lat.toFixed(7);
+          lonInput.value = q.lng.toFixed(7);
+        });
+      }
+      latInput.value = lat.toFixed(7);
+      lonInput.value = lon.toFixed(7);
     };
+    map.on('click', e => colocar(e.latlng.lat, e.latlng.lng));
+    if (latInicial != null) colocar(Number(latInicial), Number(lonInicial));
+    this._mapas = this._mapas || {};
+    this._mapas[divId] = map;
+    return { map, colocar };
+  },
+
+  async editarPunto(id) {
+    const pts = await API.get('/api/puntos');
+    const p = pts.find(x => x.id === id);
+    const f = document.getElementById('f-edit-punto');
+    f.id.value = p.id; f.nombre.value = p.nombre; f.direccion.value = p.direccion || '';
+    f.radio_mt.value = p.radio_mt;
+    const modal = document.getElementById('modal-punto');
+    const onShown = () => {
+      const m = this.crearMapaPunto('mapa-edit-punto', f.latitud, f.longitud,
+        Number(p.latitud), Number(p.longitud));
+      m.map.invalidateSize();
+      modal.removeEventListener('shown.bs.modal', onShown);
+    };
+    modal.addEventListener('shown.bs.modal', onShown);
+    new bootstrap.Modal(modal).show();
+  },
+
+  async togglePunto(id, activo) {
+    const pts = await API.get('/api/puntos');
+    const p = pts.find(x => x.id === id);
+    try {
+      await API.put(`/api/puntos/${id}`, {
+        nombre: p.nombre, direccion: p.direccion, latitud: p.latitud,
+        longitud: p.longitud, radio_mt: p.radio_mt, activo
+      });
+      this.cargarTab('puntos');
+    } catch (ex) { alert(ex.message); } // 409: hay empleados asignados
   },
 
   // ============ TURNOS ============
   async renderTurnos(c) {
     const turnos = await API.get('/api/turnos');
+    const puedeEditar = API.puedeGestionar();
     c.innerHTML = `
       <div class="row"><div class="col-lg-7"><div class="card shadow"><div class="card-body">
         <h6>Turnos</h6>
-        <table class="table table-sm table-striped"><thead>
-          <tr><th>Nombre</th><th>Entrada</th><th>Salida</th><th>Tolerancia (min)</th><th>Activo</th></tr></thead>
+        <table class="table table-sm table-striped align-middle"><thead>
+          <tr><th>Nombre</th><th>Entrada</th><th>Salida</th><th>Tolerancia (min)</th><th>Estado</th>
+          ${puedeEditar ? '<th>Acciones</th>' : ''}</tr></thead>
           <tbody>${turnos.map(t => `<tr><td>${t.nombre}</td><td>${t.hora_entrada}</td>
-            <td>${t.hora_salida}</td><td>${t.tolerancia_min}</td><td>${t.activo ? '✅' : '⛔'}</td></tr>`).join('')}
+            <td>${t.hora_salida}</td><td>${t.tolerancia_min}</td>
+            <td>${t.activo ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td>
+            ${puedeEditar ? `<td class="text-nowrap">
+              <button class="btn btn-sm btn-outline-primary" onclick="Admin.editarTurno(${t.id})">Editar</button>
+              <button class="btn btn-sm btn-outline-${t.activo ? 'danger' : 'success'}"
+                onclick="Admin.toggleTurno(${t.id}, ${t.activo ? 0 : 1})">
+                ${t.activo ? 'Desactivar' : 'Activar'}</button>
+            </td>` : ''}</tr>`).join('')}
           </tbody></table></div></div></div>
-      <div class="col-lg-5" ${API.puedeGestionar() ? '' : 'hidden'}><div class="card shadow"><div class="card-body">
+      <div class="col-lg-5" ${puedeEditar ? '' : 'hidden'}><div class="card shadow"><div class="card-body">
         <h6>Nuevo turno</h6>
         <form id="f-turno">
           <input class="form-control mb-2" name="nombre" placeholder="Nombre del turno" required>
@@ -321,15 +457,72 @@ const Admin = {
           <input class="form-control mb-2" name="hora_salida" type="time" required>
           <input class="form-control mb-2" name="tolerancia_min" type="number" value="10" placeholder="Tolerancia (min)">
           <button class="btn btn-primary w-100">Guardar</button>
-        </form></div></div></div></div>`;
-    const f = document.getElementById('f-turno');
-    if (f) f.onsubmit = async e => {
-      e.preventDefault();
-      const d = Object.fromEntries(new FormData(e.target));
-      d.tolerancia_min = +d.tolerancia_min || 10;
-      await API.post('/api/turnos', d);
+        </form></div></div></div></div>
+
+      <!-- Modal editar turno -->
+      <div class="modal fade" id="modal-turno" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Editar turno</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body"><form id="f-edit-turno">
+          <input type="hidden" name="id">
+          <div class="mb-2"><label class="form-label small">Nombre</label>
+            <input class="form-control" name="nombre" required></div>
+          <div class="mb-2"><label class="form-label small">Hora de entrada</label>
+            <input class="form-control" name="hora_entrada" type="time" required></div>
+          <div class="mb-2"><label class="form-label small">Hora de salida</label>
+            <input class="form-control" name="hora_salida" type="time" required></div>
+          <div class="mb-2"><label class="form-label small">Tolerancia (minutos)</label>
+            <input class="form-control" name="tolerancia_min" type="number" required></div>
+        </form></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary" id="btn-guardar-turno">Guardar cambios</button>
+        </div>
+      </div></div></div>`;
+    if (puedeEditar) {
+      document.getElementById('f-turno').onsubmit = async e => {
+        e.preventDefault();
+        const d = Object.fromEntries(new FormData(e.target));
+        d.tolerancia_min = +d.tolerancia_min || 10;
+        await API.post('/api/turnos', d);
+        this.cargarTab('turnos');
+      };
+      document.getElementById('btn-guardar-turno').onclick = async () => {
+        const d = Object.fromEntries(new FormData(document.getElementById('f-edit-turno')));
+        const id = d.id; delete d.id;
+        d.tolerancia_min = +d.tolerancia_min;
+        const ts = await API.get('/api/turnos');
+        d.activo = ts.find(x => x.id === +id)?.activo ?? 1;
+        try {
+          await API.put(`/api/turnos/${id}`, d);
+          bootstrap.Modal.getInstance(document.getElementById('modal-turno')).hide();
+          this.cargarTab('turnos');
+        } catch (ex) { alert(ex.message); }
+      };
+    }
+  },
+
+  async editarTurno(id) {
+    const ts = await API.get('/api/turnos');
+    const t = ts.find(x => x.id === id);
+    const f = document.getElementById('f-edit-turno');
+    f.id.value = t.id; f.nombre.value = t.nombre;
+    f.hora_entrada.value = String(t.hora_entrada).slice(0, 5);
+    f.hora_salida.value = String(t.hora_salida).slice(0, 5);
+    f.tolerancia_min.value = t.tolerancia_min;
+    new bootstrap.Modal(document.getElementById('modal-turno')).show();
+  },
+
+  async toggleTurno(id, activo) {
+    const ts = await API.get('/api/turnos');
+    const t = ts.find(x => x.id === id);
+    try {
+      await API.put(`/api/turnos/${id}`, {
+        nombre: t.nombre, hora_entrada: t.hora_entrada,
+        hora_salida: t.hora_salida, tolerancia_min: t.tolerancia_min, activo
+      });
       this.cargarTab('turnos');
-    };
+    } catch (ex) { alert(ex.message); } // 409: hay empleados asignados
   },
 
   // ============ ASIGNACIONES (REVISOR_RH, OPERACIONES, ADMIN) ============
@@ -352,9 +545,9 @@ const Admin = {
               </select></div>
               <div class="col-auto"><button class="btn btn-primary">Asignar</button></div>
             </form>
-            <table class="table table-sm mt-3"><thead><tr><th>Empleado</th><th>Punto</th><th>Activo</th><th></th></tr></thead>
+            <table class="table table-sm mt-3"><thead><tr><th>Empleado</th><th>Punto</th><th>Estado</th><th></th></tr></thead>
             <tbody>${asigP.map(a => `<tr><td>${a.apellidos} ${a.nombres}</td><td>${a.punto}</td>
-              <td>${a.activo ? '✅' : '⛔'}</td>
+              <td>${a.activo ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td>
               <td><button class="btn btn-sm btn-outline-${a.activo ? 'danger' : 'success'}"
                 onclick="Admin.toggleAsig('empleado-punto',${a.id},${a.activo ? 0 : 1})">
                 ${a.activo ? 'Desactivar' : 'Activar'}</button></td></tr>`).join('')}
